@@ -5,8 +5,9 @@ from PyQt5.QtWidgets import (
     QHBoxLayout, QFileDialog, QSizePolicy, QFrame
 )
 from PyQt5.QtGui import QPixmap
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QUrl
 from PyQt5.QtWebEngineWidgets import QWebEngineView
+from PyQt5.QtWidgets import QSplitter, QDialog
 
 from PIL import Image
 import io
@@ -14,9 +15,9 @@ from datetime import timedelta
 import os
 
 
-class TimeOffsetWidget(QWidget):
+class TimeOffsetWidget(QDialog):
     def __init__(self, camera_model, image_path, exif_time, gpx_points, find_closest_point_callback, confirm_callback):
-        super().__init__()
+        super().__init__(parent)
         self.camera_model = camera_model
         self.original_image_path = image_path
         self.image_path = image_path
@@ -39,12 +40,13 @@ class TimeOffsetWidget(QWidget):
         self.map_view = QWebEngineView()
         self.map_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         html_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "map_template.html"))
-        self.map_view.load(f"file:///{html_path}")
+        self.map_view.load(QUrl.fromLocalFile(html_path))
 
         # 📷 + 🌍 nebeneinander
-        preview_layout = QHBoxLayout()
-        preview_layout.addWidget(self.image_label, 2)
-        preview_layout.addWidget(self.map_view, 3)
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.addWidget(self.image_label)
+        splitter.addWidget(self.map_view)
+        splitter.setSizes([600, 600])  # Startverteilung
 
         # 📅 Zeit/Koord Anzeige
         self.time_label = QLabel()
@@ -72,7 +74,7 @@ class TimeOffsetWidget(QWidget):
 
         main_layout = QVBoxLayout()
         main_layout.addWidget(QLabel(f"Kamera: {camera_model}"))
-        main_layout.addLayout(preview_layout)
+        main_layout.addWidget(splitter)
         main_layout.addWidget(self.time_label)
         main_layout.addWidget(self.gps_label)
         main_layout.addLayout(controls_layout)

@@ -7,9 +7,10 @@ from datetime import timedelta
 
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QFileDialog, QLabel, QPushButton,
-    QVBoxLayout, QHBoxLayout, QListWidget, QMessageBox, QProgressDialog
+    QVBoxLayout, QHBoxLayout, QListWidget, QDialog, QMessageBox, QProgressDialog
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QStandardPaths
+
 
 from logic.exif_handler import (
     get_datetime_from_exif,
@@ -53,8 +54,16 @@ class GeoTaggerApp(QWidget):
 
         self.setLayout(layout)
 
-    def select_folder(self):
-        folder = QFileDialog.getExistingDirectory(self, "Bildordner wählen")
+    def select_folder(self):        
+        pictures_dir = QStandardPaths.writableLocation(QStandardPaths.PicturesLocation)
+
+        folder = QFileDialog.getExistingDirectory(
+            None,
+            "Bilderordner auswählen",
+            pictures_dir,  # 👉 Startverzeichnis
+            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
+            )
+
         if folder:
             self.image_folder = folder
             self.folder_label.setText(f"📁 Ordner: {os.path.basename(folder)}")
@@ -77,44 +86,58 @@ class GeoTaggerApp(QWidget):
             QMessageBox.critical(self, "Fehler", "Keine GPX-Punkte gefunden.")
             return
 
-        camera_dict = {}
+        # Kamera → Liste aller zugehörigen Bilder
+        camera_image_map = {}
         for filename in os.listdir(self.image_folder):
             if not filename.lower().endswith(('.jpg', '.jpeg')):
                 continue
             full_path = os.path.join(self.image_folder, filename)
             if has_gps_data(full_path):
                 continue
-            model = extract_camera_model(full_path)
-            if model and model not in camera_dict:
-                camera_dict[model] = full_path
+            model = extract_camera_model(full_path) or "Unbekannte Kamera"
+            camera_image_map.setdefault(model, []).append(full_path)
 
-        if not camera_dict:
-            QMessageBox.information(self, "Hinweis", "Keine bilder ohne GPS-Daten gefunden.")
+        if not camera_image_map:
+            QMessageBox.information(self, "Hinweis", "Keine Bilder ohne GPS-Daten gefunden.")
             return
 
+        # Zeige erkannte Kameras im Hinweisdialog
+        camera_list_str = "\n".join(
+            f"{model} ({len(paths)} Bilder)" for model, paths in camera_image_map.items()
+        )
+        print("📷 Gefundene Kameras:")
+        print(camera_list_str)
+        QMessageBox.information(self, "Kameras erkannt", f"Folgende Kameramodelle wurden erkannt:\n\n{camera_list_str}")
+
         self.time_offsets = {}
-        self.pending_models = set(camera_dict.keys())
 
-        def on_confirm(model, offset):
-            print(f"✅ Zeitversatz bestätigt für {model}: {offset}")
-            self.time_offsets[model] = offset
-            self.pending_models.discard(model)
-            if not self.pending_models:
-                self.process_all_images_with_offsets()
-
-        for model, img_path in camera_dict.items():
-            exif_time = get_datetime_from_exif(img_path)
+        # Zeige Zeitversatz-Dialog für jede Kamera
+        for model, image_paths in camera_image_map.items():
+            first_image = image_paths[0]
+            exif_time = get_datetime_from_exif(first_image)
             if not exif_time:
+                print(f"⚠️ Kein EXIF-Zeitstempel für {first_image}")
                 continue
+
             widget = TimeOffsetWidget(
                 camera_model=model,
-                image_path=img_path,
+                image_path=first_image,
                 exif_time=exif_time,
                 gpx_points=gpx_points,
-                find_closest_point_callback=find_closest_point,
-                confirm_callback=on_confirm
+                find_closest_point_callback=find_closest_point
             )
-            widget.show()
+
+            if widget.exec_() == QDialog.Accepted:
+                offset = widget.get_time_offset()
+                print(f"✅ Zeitversatz bestätigt für {model}: {offset}")
+                self.time_offsets[model] = offset
+            else:
+                print(f"⛔ Zeitversatz für {model} abgebrochen.")
+                return  # Vorgang abbrechen, wenn abgelehnt
+
+        # Wenn alle offsets gesetzt sind, starte Bildverarbeitung
+        self.process_all_images_with_offsets()
+
 
     def process_all_images_with_offsets(self):
         gpx_points = load_gpx_points(self.gpx_file)
