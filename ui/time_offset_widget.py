@@ -1,13 +1,12 @@
 # ui/time_offset_widget.py
 
 from PyQt5.QtWidgets import (
-    QWidget, QLabel, QPushButton, QVBoxLayout,
-    QHBoxLayout, QFileDialog, QSizePolicy, QFrame
+    QLabel, QPushButton, QVBoxLayout, QHBoxLayout,
+    QFileDialog, QSizePolicy, QFrame, QSplitter, QDialog
 )
 from PyQt5.QtGui import QPixmap
-from PyQt5.QtCore import Qt, QUrl
+from PyQt5.QtCore import Qt, QUrl, QTimer
 from PyQt5.QtWebEngineWidgets import QWebEngineView
-from PyQt5.QtWidgets import QSplitter, QDialog
 
 from PIL import Image
 import io
@@ -16,7 +15,7 @@ import os
 
 
 class TimeOffsetWidget(QDialog):
-    def __init__(self, camera_model, image_path, exif_time, gpx_points, find_closest_point_callback, confirm_callback):
+    def __init__(self, camera_model, image_path, exif_time, gpx_points, find_closest_point_callback, parent=None):
         super().__init__(parent)
         self.camera_model = camera_model
         self.original_image_path = image_path
@@ -25,7 +24,6 @@ class TimeOffsetWidget(QDialog):
         self.gpx_points = gpx_points
         self.offset = timedelta()
         self.find_closest_point = find_closest_point_callback
-        self.confirm_callback = confirm_callback
 
         self.setWindowTitle(f"Zeitversatz für: {camera_model}")
         self.resize(1200, 700)
@@ -62,7 +60,7 @@ class TimeOffsetWidget(QDialog):
         self.minus_btn.clicked.connect(self.decrease_offset)
         self.plus_btn.clicked.connect(self.increase_offset)
         self.change_img_btn.clicked.connect(self.select_new_image)
-        self.confirm_btn.clicked.connect(self.confirm)
+        self.confirm_btn.clicked.connect(self.accept)  # ersetzt confirm_callback
 
         # 📐 Layouts
         controls_layout = QHBoxLayout()
@@ -103,10 +101,10 @@ class TimeOffsetWidget(QDialog):
         match = self.find_closest_point(self.gpx_points, corrected_time)
         if match:
             self.gps_label.setText(f"📍 Koordinaten: {match['lat']:.5f}, {match['lon']:.5f}")
-            self.update_map(match['lat'], match['lon'])
+            QTimer.singleShot(1000, lambda: self.update_map(match['lat'], match['lon']))
         else:
             self.gps_label.setText("⚠️ Keine passenden GPX-Daten gefunden.")
-            self.update_map(None, None)
+            QTimer.singleShot(1000, lambda: self.update_map(None, None))
 
     def update_map(self, lat, lon):
         if lat is not None and lon is not None:
@@ -140,6 +138,5 @@ class TimeOffsetWidget(QDialog):
             else:
                 self.gps_label.setText("⚠️ Keine gültige EXIF-Zeit in diesem Bild.")
 
-    def confirm(self):
-        self.confirm_callback(self.camera_model, self.offset)
-        self.close()
+    def get_time_offset(self):
+        return self.offset

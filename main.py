@@ -134,6 +134,9 @@ class GeoTaggerApp(QWidget):
             else:
                 print(f"⛔ Zeitversatz für {model} abgebrochen.")
                 return  # Vorgang abbrechen, wenn abgelehnt
+        if len(self.time_offsets) == len(camera_image_map):
+            self.process_all_images_with_offsets()
+
 
         # Wenn alle offsets gesetzt sind, starte Bildverarbeitung
         self.process_all_images_with_offsets()
