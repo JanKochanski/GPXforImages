@@ -2,7 +2,9 @@
 
 from PyQt5.QtWidgets import (
     QLabel, QPushButton, QVBoxLayout, QHBoxLayout,
-    QFileDialog, QSizePolicy, QFrame, QSplitter, QDialog
+    QFileDialog, QSizePolicy, QFrame, QSplitter, QDialog, 
+    QTableWidget, QTableWidgetItem, QScrollArea
+
 )
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtCore import Qt, QUrl, QTimer
@@ -26,7 +28,7 @@ class TimeOffsetWidget(QDialog):
         self.find_closest_point = find_closest_point_callback
 
         self.setWindowTitle(f"Zeitversatz für: {camera_model}")
-        self.resize(1200, 700)
+        self.resize(1900, 1000)
 
         # 📷 Bildvorschau
         self.image_label = QLabel()
@@ -46,6 +48,17 @@ class TimeOffsetWidget(QDialog):
         splitter.addWidget(self.map_view)
         splitter.setSizes([600, 600])  # Startverteilung
 
+        # 📋 Kameratabelle
+        self.camera_table = QTableWidget()
+        self.camera_table.setColumnCount(2)
+        self.camera_table.setHorizontalHeaderLabels(["Zeitversatz", "Kamera"])
+        self.camera_table.verticalHeader().setVisible(False)
+        self.camera_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.camera_table.setSelectionMode(QTableWidget.NoSelection)
+        self.camera_table.setMaximumHeight(5 * 30 + 30)  # max 5 Zeilen + Header
+        self.camera_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+
         # 📅 Zeit/Koord Anzeige
         self.time_label = QLabel()
         self.gps_label = QLabel()
@@ -63,6 +76,7 @@ class TimeOffsetWidget(QDialog):
         self.confirm_btn.clicked.connect(self.accept)  # ersetzt confirm_callback
 
         # 📐 Layouts
+        # 📐 Steuerleisten
         controls_layout = QHBoxLayout()
         controls_layout.addWidget(self.minus_btn)
         controls_layout.addWidget(self.plus_btn)
@@ -70,9 +84,20 @@ class TimeOffsetWidget(QDialog):
         controls_layout.addStretch()
         controls_layout.addWidget(self.confirm_btn)
 
+        # 📐 Splitter in eigenen Container verpacken (nur dieser darf vertikal wachsen)
+        splitter_container = QFrame()
+        splitter_container_layout = QVBoxLayout()
+        splitter_container_layout.setContentsMargins(0, 0, 0, 0)
+        splitter_container_layout.addWidget(splitter)
+        splitter_container.setLayout(splitter_container_layout)
+
+        # 📐 Hauptlayout
         main_layout = QVBoxLayout()
         main_layout.addWidget(QLabel(f"Kamera: {camera_model}"))
-        main_layout.addWidget(splitter)
+        main_layout.addWidget(splitter_container)  # Das ist der einzige stretchebare Bereich
+        main_layout.setStretch(main_layout.count() - 1, 1)  # splitter_container stretcht vertikal
+
+        main_layout.addWidget(self.camera_table)
         main_layout.addWidget(self.time_label)
         main_layout.addWidget(self.gps_label)
         main_layout.addLayout(controls_layout)
@@ -106,16 +131,49 @@ class TimeOffsetWidget(QDialog):
             self.gps_label.setText("⚠️ Keine passenden GPX-Daten gefunden.")
             QTimer.singleShot(1000, lambda: self.update_map(None, None))
 
+    def set_camera_overview(self, camera_image_map, time_offset_dict):
+        self.camera_table.setRowCount(len(camera_image_map))
+        for row, (model, _) in enumerate(camera_image_map.items()):
+            offset = time_offset_dict.get(model, "Nicht gesetzt")
+            self.camera_table.setItem(row, 0, QTableWidgetItem(str(offset)))
+            self.camera_table.setItem(row, 1, QTableWidgetItem(model))
+
     def update_map(self, lat, lon):
-        if lat is not None and lon is not None:
-            js = f"""
-                if (typeof updateMarker === 'function') {{
-                    updateMarker({lat}, {lon});
-                }}
-            """
-        else:
+        if lat is None or lon is None:
             js = "if (typeof clearMarker === 'function') { clearMarker(); }"
+            self.map_view.page().runJavaScript(js)
+            return
+
+        corrected_time = self.exif_time + self.offset
+        ten_minutes = timedelta(minutes=10)
+
+        # Finde alle GPX-Punkte in +/-10 Minuten
+        relevant_points = [
+            p for p in self.gpx_points
+            if abs(p['time'] - corrected_time) <= ten_minutes
+        ]
+
+        # Füge den aktuellen Punkt explizit hinzu
+        relevant_points.append({'lat': lat, 'lon': lon})
+
+        # Berechne Bounding Box
+        lats = [p['lat'] for p in relevant_points]
+        lons = [p['lon'] for p in relevant_points]
+        min_lat, max_lat = min(lats), max(lats)
+        min_lon, max_lon = min(lons), max(lons)
+
+        js = f"""
+            if (typeof updateMarker === 'function' && typeof map !== 'undefined') {{
+                updateMarker({lat}, {lon});
+                var bounds = L.latLngBounds(
+                    L.latLng({min_lat}, {min_lon}),
+                    L.latLng({max_lat}, {max_lon})
+                );
+                map.fitBounds(bounds, {{ padding: [20, 20] }});
+            }}
+        """
         self.map_view.page().runJavaScript(js)
+
 
     def increase_offset(self):
         self.offset += timedelta(hours=1)

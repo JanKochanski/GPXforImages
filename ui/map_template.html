@@ -28,15 +28,15 @@
     }
 
     function updateMarker(lat, lon) {
-      if (!mapReady) return;
       const latlng = [lat, lon];
       if (marker) {
         marker.setLatLng(latlng);
       } else {
         marker = L.marker(latlng).addTo(map);
       }
-      map.setView(latlng, 14);
+      // map.fitBounds(...) wird von Python über JS eingefügt
     }
+
 
     function clearMarker() {
       if (marker && mapReady) {

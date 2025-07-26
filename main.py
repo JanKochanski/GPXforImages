@@ -7,7 +7,8 @@ from datetime import timedelta
 
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QFileDialog, QLabel, QPushButton,
-    QVBoxLayout, QHBoxLayout, QListWidget, QDialog, QMessageBox, QProgressDialog
+    QVBoxLayout, QHBoxLayout, QListWidget, QDialog, QMessageBox, QProgressDialog,
+    QTableWidget, QTableWidgetItem, QScrollArea
 )
 from PyQt5.QtCore import Qt, QStandardPaths
 
@@ -107,7 +108,7 @@ class GeoTaggerApp(QWidget):
         )
         print("📷 Gefundene Kameras:")
         print(camera_list_str)
-        QMessageBox.information(self, "Kameras erkannt", f"Folgende Kameramodelle wurden erkannt:\n\n{camera_list_str}")
+        #QMessageBox.information(self, "Kameras erkannt", f"Folgende Kameramodelle wurden erkannt:\n\n{camera_list_str}")
 
         self.time_offsets = {}
 
@@ -126,7 +127,8 @@ class GeoTaggerApp(QWidget):
                 gpx_points=gpx_points,
                 find_closest_point_callback=find_closest_point
             )
-
+            widget.set_camera_overview(camera_image_map, self.time_offsets)
+            
             if widget.exec_() == QDialog.Accepted:
                 offset = widget.get_time_offset()
                 print(f"✅ Zeitversatz bestätigt für {model}: {offset}")
@@ -140,7 +142,6 @@ class GeoTaggerApp(QWidget):
 
         # Wenn alle offsets gesetzt sind, starte Bildverarbeitung
         self.process_all_images_with_offsets()
-
 
     def process_all_images_with_offsets(self):
         gpx_points = load_gpx_points(self.gpx_file)
@@ -195,6 +196,7 @@ class GeoTaggerApp(QWidget):
             "Fertig",
             f"✅ Erfolgreich bearbeitet: {count_success}\n❌ Fehlgeschlagen: {count_failed}"
         )
+
 
 
 if __name__ == "__main__":
