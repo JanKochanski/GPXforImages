@@ -90,7 +90,7 @@ class GeoTaggerApp(QWidget):
         # Kamera → Liste aller zugehörigen Bilder
         camera_image_map = {}
         for filename in os.listdir(self.image_folder):
-            if not filename.lower().endswith(('.jpg', '.jpeg')):
+            if not filename.lower().endswith(('.jpg', '.jpeg', '.arw', '.cr2', '.nef', '.rw2')):
                 continue
             full_path = os.path.join(self.image_folder, filename)
             if has_gps_data(full_path):
@@ -149,7 +149,7 @@ class GeoTaggerApp(QWidget):
         # Bilder nach Kameramodell gruppieren
         camera_images = defaultdict(list)
         for filename in os.listdir(self.image_folder):
-            if not filename.lower().endswith(('.jpg', '.jpeg')):
+            if not filename.lower().endswith(('.jpg', '.jpeg', '.arw', '.cr2', '.nef', '.rw2')):
                 continue
             full_path = os.path.join(self.image_folder, filename)
             if has_gps_data(full_path):
